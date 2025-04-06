@@ -7,7 +7,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.MalformedURLException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Spliterator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.StringTokenizer;
 
 import httpserver.itf.HttpRequest;
@@ -30,6 +32,9 @@ public class HttpServer {
 	private int m_port;
 	private File m_folder;  // default folder for accessing static resources (files)
 	private ServerSocket m_ssoc;
+	public static int max_session = 5000; // time limit of a session
+	private static Map<String, Session> sessions = new HashMap<>();
+	private static int nb_sessions = 0;
 
 	protected HttpServer(int port, String folderName) {
 		m_port = port;
@@ -87,7 +92,39 @@ public class HttpServer {
 	public HttpResponse getResponse(HttpRequest req, PrintStream ps) {
 		return new HttpResponseImpl(this, req, ps);
 	}
+	
+	
+	public Session getSessionById(String id) {
+	    return sessions.get(id);
+	}
+	public static int getNbSession() {
+	    return nb_sessions;
+	}
+	public static void increment_nbSession() {
+		nb_sessions++;
+	}
 
+	public void putSession(String id, Session session) {
+	    sessions.put(id, session);
+	}
+
+	public Map<String, Session> getSessions() {
+	    return sessions;
+	}
+
+	public synchronized void cleanExpiredSessions() {
+	    long now = System.currentTimeMillis();
+	    Iterator<Map.Entry<String, Session>> it = sessions.entrySet().iterator();
+
+	    while (it.hasNext()) {
+	        Map.Entry<String, Session> entry = it.next();
+	        Session session = entry.getValue();
+	        if (now - session.get_lastAccessed() > max_session) {
+	            it.remove();
+	        }
+	    }
+	}
+	
 
 	/*
 	 * Server main loop
@@ -95,6 +132,7 @@ public class HttpServer {
 	protected void loop() {
 		try {
 			while (true) {
+				cleanExpiredSessions(); // cleaning expired sessions
 				Socket soc = m_ssoc.accept();
 				(new HttpWorker(this, soc)).start();
 			}
