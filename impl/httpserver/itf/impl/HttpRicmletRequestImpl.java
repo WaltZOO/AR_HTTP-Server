@@ -8,29 +8,41 @@ import java.util.Map;
 import httpserver.itf.HttpResponse;
 import httpserver.itf.HttpRicmlet;
 import httpserver.itf.HttpRicmletRequest;
+import httpserver.itf.HttpRicmletResponse;
 import httpserver.itf.HttpSession;
 
 public class HttpRicmletRequestImpl extends HttpRicmletRequest {
 
 	public String path;
 	public String[] request;
-	public String args[];
+//	private String[] args;
+	private Map<String, String> args;
+	private Map<String, HttpRicmlet> singletonHashMap = new HashMap<String, HttpRicmlet>();
 	private Map<String, String> cookies;
 	private HttpRicmletResponseImpl ricmletResp;
 
 	public HttpRicmletRequestImpl(HttpServer hs, String method, String ressname, BufferedReader br) throws IOException {
 		super(hs, method, ressname, br);
+		
+		// parsing of the path
 		request = m_ressname.split("\\?");
 		path = request[0].replace("/", ".");
 		path = path.substring(10); // remove the ricmlets part
-		System.out.println(request.length);
 
-		// parse arguments
+		
+		//parsing args
+		args = new HashMap<>();
 		if (request.length >= 2) {
 			System.out.println(path);
-			args = request[1].split("&");
-		} else {
-			args = new String[0]; // avoid NullPointerException
+			String[] paramPairs = request[1].split("&");
+			for (String pair : paramPairs) {
+				String[] keyValue = pair.split("=", 2);
+				if (keyValue.length == 2) {
+					args.put(keyValue[0], keyValue[1]);
+				} else if (keyValue.length == 1) {
+					args.put(keyValue[0], "");
+				}
+			}
 		}
 
 		// parse cookies
@@ -40,7 +52,7 @@ public class HttpRicmletRequestImpl extends HttpRicmletRequest {
 			if (line.startsWith("Cookie: ")) {
 				String[] cookiePairs = line.substring(8).split(";");
 				for (String pair : cookiePairs) {
-					String[] keyValue = pair.trim().split("=", 2); //
+					String[] keyValue = pair.trim().split("=", 2);
 					if (keyValue.length >= 1) {
 						String value = keyValue.length > 1 ? keyValue[1] : "";
 						cookies.put(keyValue[0].trim(), value.trim());
@@ -72,8 +84,8 @@ public class HttpRicmletRequestImpl extends HttpRicmletRequest {
 			sessionId = String.valueOf(HttpServer.getNbSession()); // put the number of sessions as ID
 
 			session = new Session(sessionId);
-	        m_hs.putSession(sessionId, session); // add it to the session map			
-	        ((HttpRicmletResponseImpl) ricmletResp).setCookie("session-id", sessionId);
+			m_hs.putSession(sessionId, session); // add it to the session map
+			((HttpRicmletResponseImpl) ricmletResp).setCookie("session-id", sessionId);
 		}
 
 		return session;
@@ -81,15 +93,7 @@ public class HttpRicmletRequestImpl extends HttpRicmletRequest {
 
 	@Override
 	public String getArg(String name) {
-		if (args != null) {
-			for (String arg : args) {
-				String[] keyValue = arg.split("=");
-				if (keyValue.length == 2 && keyValue[0].equals(name)) {
-					return keyValue[1];
-				}
-			}
-		}
-		return null;
+		return args.get(name);
 	}
 
 	@Override
@@ -100,14 +104,14 @@ public class HttpRicmletRequestImpl extends HttpRicmletRequest {
 	@Override
 	public void process(HttpResponse resp) throws Exception {
 		try {
+
 			Class<?> c = Class.forName(path);
-			HttpRicmlet ricmlet = (HttpRicmlet) c.getDeclaredConstructor().newInstance();
-			ricmletResp = new HttpRicmletResponseImpl(((HttpResponseImpl) resp).m_ps);
-			ricmlet.doGet(this, ricmletResp);
-		} catch (ClassNotFoundException e) {
-			resp.setReplyError(404, "Ricmlet not found");
+			HttpRicmlet ricmlet = m_hs.getInstance(path);
+            ricmletResp = new HttpRicmletResponseImpl(((HttpResponseImpl)resp).m_ps, m_hs, this);
+            ricmlet.doGet(this, ricmletResp);
+
 		} catch (Exception e) {
-			resp.setReplyError(500, "Internal Server Error");
+			resp.setReplyError(404, "Not Found Error");
 			e.printStackTrace();
 		}
 	}

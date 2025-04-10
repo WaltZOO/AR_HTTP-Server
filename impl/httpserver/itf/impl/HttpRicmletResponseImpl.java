@@ -6,15 +6,20 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
+import httpserver.itf.HttpRequest;
 import httpserver.itf.HttpRicmletResponse;
 
 public class HttpRicmletResponseImpl implements HttpRicmletResponse{
 
 	private PrintStream ps;
+	private HttpServer m_hs;
+	private HttpRequest m_req;
 	private Map<String, String> cookies = new HashMap<>();
 	
-	public HttpRicmletResponseImpl(PrintStream ps) {
+	public HttpRicmletResponseImpl(PrintStream ps, HttpServer hs, HttpRequest req) {
 		this.ps = ps;
+		this.m_hs = hs;
+		this.m_req = req;
     }
 	
 	@Override
